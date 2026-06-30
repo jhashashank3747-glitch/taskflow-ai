@@ -6,8 +6,11 @@ const express = require('express');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
-
 const authRoutes = require('./routes/authRoutes');
+const workspaceRoutes = require('./routes/workspaceRoutes');
+const boardRoutes = require('./routes/boardRoutes');
+const listRoutes = require('./routes/listRoutes');
+const cardRoutes = require('./routes/cardRoutes');
 
 const app = express();
 
@@ -18,6 +21,10 @@ app.use(express.json());
 app.use(cookieParser());
 
 app.use('/api/auth', authRoutes);
+app.use('/api/workspaces', workspaceRoutes);
+app.use('/api/boards', boardRoutes);
+app.use('/api/lists', listRoutes);
+app.use('/api/cards', cardRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
