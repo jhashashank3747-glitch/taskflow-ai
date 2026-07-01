@@ -1,6 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import {
+  DndContext,
+  closestCorners,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from '@dnd-kit/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import api from '../services/api';
+import SortableList from '../components/SortableList';
 
 function Board() {
   const { id } = useParams();
@@ -10,6 +19,8 @@ function Board() {
   const [newListTitle, setNewListTitle] = useState('');
   const [newCardTitles, setNewCardTitles] = useState({});
   const [error, setError] = useState('');
+
+  const sensors = useSensors(useSensor(PointerSensor));
 
   const fetchBoard = async () => {
     try {
@@ -23,15 +34,12 @@ function Board() {
   const fetchListsAndCards = async () => {
     try {
       const listsRes = await api.get(`/lists/board/${id}`);
-      const listsData = listsRes.data;
-
       const listsWithCards = await Promise.all(
-        listsData.map(async (list) => {
+        listsRes.data.map(async (list) => {
           const cardsRes = await api.get(`/cards/list/${list._id}`);
           return { ...list, cards: cardsRes.data };
         })
       );
-
       setLists(listsWithCards);
     } catch (err) {
       setError('Failed to load lists');
@@ -76,6 +84,62 @@ function Board() {
     }
   };
 
+  const findListByCardId = (cardId) => {
+    return lists.find((list) => list.cards.some((card) => card._id === cardId));
+  };
+
+  const handleDragEnd = async (event) => {
+    const { active, over } = event;
+    if (!over) return;
+
+    const activeId = active.id;
+    const overId = over.id;
+    if (activeId === overId) return;
+
+    const activeList = findListByCardId(activeId);
+    const overList =
+      findListByCardId(overId) || lists.find((l) => l._id === overId);
+
+    if (!activeList || !overList) return;
+
+    if (activeList._id === overList._id) {
+      // reordering within same list
+      const oldIndex = activeList.cards.findIndex((c) => c._id === activeId);
+      const newIndex = activeList.cards.findIndex((c) => c._id === overId);
+      const reordered = arrayMove(activeList.cards, oldIndex, newIndex);
+
+      setLists((prev) =>
+        prev.map((l) =>
+          l._id === activeList._id ? { ...l, cards: reordered } : l
+        )
+      );
+
+      await Promise.all(
+        reordered.map((card, index) =>
+          api.put(`/cards/${card._id}`, { position: index })
+        )
+      );
+    } else {
+      // moving card to different list
+      const card = activeList.cards.find((c) => c._id === activeId);
+      const newActiveCards = activeList.cards.filter((c) => c._id !== activeId);
+      const newOverCards = [...overList.cards, { ...card, list: overList._id }];
+
+      setLists((prev) =>
+        prev.map((l) => {
+          if (l._id === activeList._id) return { ...l, cards: newActiveCards };
+          if (l._id === overList._id) return { ...l, cards: newOverCards };
+          return l;
+        })
+      );
+
+      await api.put(`/cards/${activeId}`, {
+        list: overList._id,
+        position: newOverCards.length - 1,
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gray-100 p-8">
       <button
@@ -91,67 +155,43 @@ function Board() {
 
       {error && <p className="text-red-500 mb-4">{error}</p>}
 
-      <div className="flex gap-4 overflow-x-auto pb-4">
-        {lists.map((list) => (
-          <div
-            key={list._id}
-            className="bg-white rounded-lg shadow p-4 min-w-64 w-64 flex-shrink-0"
-          >
-            <h3 className="font-semibold text-gray-700 mb-3">{list.title}</h3>
-
-            <div className="flex flex-col gap-2 mb-3">
-              {list.cards?.map((card) => (
-                <div
-                  key={card._id}
-                  className="bg-gray-50 border rounded p-2 text-sm text-gray-700"
-                >
-                  {card.title}
-                </div>
-              ))}
-            </div>
-
-            <input
-              type="text"
-              placeholder="Add a card..."
-              value={newCardTitles[list._id] || ''}
-              onChange={(e) =>
-                setNewCardTitles((prev) => ({
-                  ...prev,
-                  [list._id]: e.target.value,
-                }))
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCorners}
+        onDragEnd={handleDragEnd}
+      >
+        <div className="flex gap-4 overflow-x-auto pb-4">
+          {lists.map((list) => (
+            <SortableList
+              key={list._id}
+              list={list}
+              newCardTitle={newCardTitles[list._id]}
+              onCardTitleChange={(listId, val) =>
+                setNewCardTitles((prev) => ({ ...prev, [listId]: val }))
               }
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleCreateCard(list._id);
-              }}
-              className="w-full border rounded px-2 py-1 text-sm mb-2"
+              onAddCard={handleCreateCard}
             />
-            <button
-              onClick={() => handleCreateCard(list._id)}
-              className="w-full bg-blue-500 text-white text-sm py-1 rounded hover:bg-blue-600"
-            >
-              + Add Card
-            </button>
-          </div>
-        ))}
+          ))}
 
-        <div className="min-w-64 w-64 flex-shrink-0">
-          <form onSubmit={handleCreateList}>
-            <input
-              type="text"
-              placeholder="New list title"
-              value={newListTitle}
-              onChange={(e) => setNewListTitle(e.target.value)}
-              className="w-full border rounded px-3 py-2 mb-2"
-            />
-            <button
-              type="submit"
-              className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
-            >
-              + Add List
-            </button>
-          </form>
+          <div className="min-w-64 w-64 flex-shrink-0">
+            <form onSubmit={handleCreateList}>
+              <input
+                type="text"
+                placeholder="New list title"
+                value={newListTitle}
+                onChange={(e) => setNewListTitle(e.target.value)}
+                className="w-full border rounded px-3 py-2 mb-2"
+              />
+              <button
+                type="submit"
+                className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
+              >
+                + Add List
+              </button>
+            </form>
+          </div>
         </div>
-      </div>
+      </DndContext>
     </div>
   );
 }
