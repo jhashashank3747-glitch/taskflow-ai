@@ -19,6 +19,7 @@ function Board() {
   const [lists, setLists] = useState([]);
   const [newListTitle, setNewListTitle] = useState('');
   const [newCardTitles, setNewCardTitles] = useState({});
+  const [activities, setActivities] = useState([]);
   const [error, setError] = useState('');
 
   const sensors = useSensors(useSensor(PointerSensor));
@@ -47,15 +48,23 @@ function Board() {
     }
   };
 
+  const fetchActivities = async () => {
+    try {
+      const res = await api.get(`/activities/${id}`);
+      setActivities(res.data);
+    } catch (err) {
+      console.error('Failed to load activities');
+    }
+  };
+
   useEffect(() => {
     fetchBoard();
     fetchListsAndCards();
+    fetchActivities();
 
-    // Connect socket and join this board's room
     socket.connect();
     socket.emit('join_board', id);
 
-    // Listen for card moved by another user
     socket.on('card_moved', ({ cardId, newListId, position }) => {
       setLists((prev) => {
         const sourceList = prev.find((l) =>
@@ -67,10 +76,7 @@ function Board() {
 
         return prev.map((l) => {
           if (l._id === sourceList._id) {
-            return {
-              ...l,
-              cards: l.cards.filter((c) => c._id !== cardId),
-            };
+            return { ...l, cards: l.cards.filter((c) => c._id !== cardId) };
           }
           if (l._id === newListId) {
             return { ...l, cards: [...l.cards, updatedCard] };
@@ -80,7 +86,6 @@ function Board() {
       });
     });
 
-    // Listen for card created by another user
     socket.on('card_created', (card) => {
       setLists((prev) =>
         prev.map((l) =>
@@ -89,12 +94,10 @@ function Board() {
       );
     });
 
-    // Listen for list created by another user
     socket.on('list_created', (list) => {
       setLists((prev) => [...prev, { ...list, cards: [] }]);
     });
 
-    // Cleanup when leaving the board page
     return () => {
       socket.emit('leave_board', id);
       socket.off('card_moved');
@@ -129,11 +132,13 @@ function Board() {
       const res = await api.post('/cards', {
         title,
         listId,
+        boardId: id,
         position: list?.cards?.length || 0,
       });
       setNewCardTitles((prev) => ({ ...prev, [listId]: '' }));
       socket.emit('card_created', { boardId: id, card: res.data });
       fetchListsAndCards();
+      fetchActivities();
     } catch (err) {
       setError('Failed to create card');
     }
@@ -142,11 +147,10 @@ function Board() {
   const handleSubtasksCreated = (listId, subtasks) => {
     setLists((prev) =>
       prev.map((l) =>
-        l._id === listId
-          ? { ...l, cards: [...l.cards, ...subtasks] }
-          : l
+        l._id === listId ? { ...l, cards: [...l.cards, ...subtasks] } : l
       )
     );
+    fetchActivities();
   };
 
   const findListByCardId = (cardId) => {
@@ -270,6 +274,29 @@ function Board() {
           </div>
         </div>
       </DndContext>
+
+      <div className="mt-8">
+        <h2 className="text-lg font-semibold text-gray-700 mb-3">Activity</h2>
+        <div className="bg-white rounded-lg shadow p-4 max-w-md">
+          {activities.length === 0 && (
+            <p className="text-gray-400 text-sm">No activity yet.</p>
+          )}
+          {activities.map((activity) => (
+            <div
+              key={activity._id}
+              className="text-sm text-gray-600 py-2 border-b last:border-0"
+            >
+              <span className="font-medium text-gray-800">
+                {activity.user?.name}
+              </span>{' '}
+              {activity.action}
+              <span className="text-gray-400 text-xs ml-2">
+                {new Date(activity.createdAt).toLocaleTimeString()}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

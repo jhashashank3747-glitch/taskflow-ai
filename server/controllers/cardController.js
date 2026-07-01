@@ -1,9 +1,10 @@
 const Card = require('../models/Card');
+const { createActivity } = require('./activityController');
 
 // CREATE a card
 const createCard = async (req, res) => {
   try {
-    const { title, listId, position, description } = req.body;
+    const { title, listId, position, description, boardId } = req.body;
 
     if (!title || !listId) {
       return res.status(400).json({ message: 'Title and listId are required' });
@@ -15,6 +16,10 @@ const createCard = async (req, res) => {
       list: listId,
       position: position ?? 0,
     });
+
+    if (boardId) {
+      await createActivity(boardId, req.userId, `created card "${card.title}"`);
+    }
 
     res.status(201).json(card);
   } catch (err) {
@@ -32,7 +37,7 @@ const getCardsByList = async (req, res) => {
   }
 };
 
-// UPDATE a card (title, description, position, list - for moving across lists)
+// UPDATE a card
 const updateCard = async (req, res) => {
   try {
     const card = await Card.findByIdAndUpdate(req.params.id, req.body, { new: true });
