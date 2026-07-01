@@ -77,4 +77,19 @@ const addMember = async (req, res) => {
   }
 };
 
-module.exports = { createWorkspace, getWorkspaces, getWorkspaceById, addMember };
+const deleteWorkspace = async (req, res) => {
+  try {
+    const workspace = await Workspace.findById(req.params.id);
+    if (!workspace) {
+      return res.status(404).json({ message: 'Workspace not found' });
+    }
+    if (workspace.owner.toString() !== req.userId) {
+      return res.status(403).json({ message: 'Only the owner can delete this workspace' });
+    }
+    await Workspace.findByIdAndDelete(req.params.id);
+    res.status(200).json({ message: 'Workspace deleted' });
+  } catch (err) {
+    res.status(500).json({ message: 'Server error', error: err.message });
+  }
+};
+module.exports = { createWorkspace, getWorkspaces, getWorkspaceById, addMember, deleteWorkspace };

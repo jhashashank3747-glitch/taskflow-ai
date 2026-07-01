@@ -152,6 +152,19 @@ function Board() {
     );
     fetchActivities();
   };
+  const handleDeleteList = (listId) => {
+    setLists((prev) => prev.filter((l) => l._id !== listId));
+  };
+
+  const handleDeleteCard = (listId, cardId) => {
+    setLists((prev) =>
+        prev.map((l) =>
+        l._id === listId
+            ? { ...l, cards: l.cards.filter((c) => c._id !== cardId) }
+            : l
+        )
+    );
+   };
 
   const findListByCardId = (cardId) => {
     return lists.find((list) => list.cards.some((card) => card._id === cardId));
@@ -222,79 +235,122 @@ function Board() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100 p-8">
-      <button
-        onClick={() => navigate(-1)}
-        className="text-blue-600 mb-6 inline-block hover:underline"
-      >
-        ← Back
-      </button>
-
-      <h1 className="text-2xl font-bold text-gray-800 mb-6">
-        {board?.title || 'Board'}
-      </h1>
-
-      {error && <p className="text-red-500 mb-4">{error}</p>}
-
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCorners}
-        onDragEnd={handleDragEnd}
-      >
-        <div className="flex gap-4 overflow-x-auto pb-4">
-          {lists.map((list) => (
-            <SortableList
-              key={list._id}
-              list={list}
-              newCardTitle={newCardTitles[list._id]}
-              onCardTitleChange={(listId, val) =>
-                setNewCardTitles((prev) => ({ ...prev, [listId]: val }))
-              }
-              onAddCard={handleCreateCard}
-              onSubtasksCreated={handleSubtasksCreated}
-            />
-          ))}
-
-          <div className="min-w-64 w-64 flex-shrink-0">
-            <form onSubmit={handleCreateList}>
-              <input
-                type="text"
-                placeholder="New list title"
-                value={newListTitle}
-                onChange={(e) => setNewListTitle(e.target.value)}
-                className="w-full border rounded px-3 py-2 mb-2"
-              />
-              <button
-                type="submit"
-                className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700"
-              >
-                + Add List
-              </button>
-            </form>
-          </div>
+    <div className="min-h-screen flex flex-col" style={{ background: '#0F172A' }}>
+      {/* Header */}
+      <div className="px-8 py-5 flex items-center justify-between flex-shrink-0"
+        style={{ background: '#1E293B', borderBottom: '1px solid #334155' }}>
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => navigate(-1)}
+            className="text-sm transition"
+            style={{ color: '#64748B' }}
+            onMouseEnter={e => e.currentTarget.style.color = '#94A3B8'}
+            onMouseLeave={e => e.currentTarget.style.color = '#64748B'}
+          >
+            ← Back
+          </button>
+          <span style={{ color: '#334155' }}>/</span>
+          <h1 className="text-white font-semibold">{board?.title || 'Board'}</h1>
         </div>
-      </DndContext>
+      </div>
 
-      <div className="mt-8">
-        <h2 className="text-lg font-semibold text-gray-700 mb-3">Activity</h2>
-        <div className="bg-white rounded-lg shadow p-4 max-w-md">
-          {activities.length === 0 && (
-            <p className="text-gray-400 text-sm">No activity yet.</p>
-          )}
-          {activities.map((activity) => (
-            <div
-              key={activity._id}
-              className="text-sm text-gray-600 py-2 border-b last:border-0"
-            >
-              <span className="font-medium text-gray-800">
-                {activity.user?.name}
-              </span>{' '}
-              {activity.action}
-              <span className="text-gray-400 text-xs ml-2">
-                {new Date(activity.createdAt).toLocaleTimeString()}
-              </span>
+      {error && (
+        <div className="mx-8 mt-4 px-4 py-3 rounded-lg text-sm"
+          style={{ background: '#450A0A', color: '#FCA5A5' }}>
+          {error}
+        </div>
+      )}
+
+      {/* Board area */}
+      <div className="flex-1 overflow-x-auto p-6">
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCorners}
+          onDragEnd={handleDragEnd}
+        >
+          <div className="flex gap-4 items-start">
+            {lists.map((list) => (
+              <SortableList
+                key={list._id}
+                list={list}
+                newCardTitle={newCardTitles[list._id]}
+                onCardTitleChange={(listId, val) =>
+                  setNewCardTitles((prev) => ({ ...prev, [listId]: val }))
+                }
+                onAddCard={handleCreateCard}
+                onSubtasksCreated={handleSubtasksCreated}
+                onDeleteList={handleDeleteList}
+                onDeleteCard={handleDeleteCard}
+              />
+              
+            ))}
+
+            {/* Add list */}
+            <div className="flex-shrink-0" style={{ minWidth: '272px', width: '272px' }}>
+              <form
+                onSubmit={handleCreateList}
+                className="rounded-xl p-4"
+                style={{ background: '#1E293B', border: '1px solid #334155' }}
+              >
+                <input
+                  type="text"
+                  placeholder="New list title"
+                  value={newListTitle}
+                  onChange={(e) => setNewListTitle(e.target.value)}
+                  className="w-full rounded-lg px-3 py-2 text-sm text-white outline-none mb-2"
+                  style={{ background: '#0F172A', border: '1px solid #334155' }}
+                />
+                <button
+                  type="submit"
+                  className="w-full py-2 rounded-lg text-xs font-medium text-white"
+                  style={{ background: '#10B981' }}
+                >
+                  + Add List
+                </button>
+              </form>
             </div>
-          ))}
+          </div>
+        </DndContext>
+      </div>
+
+      {/* Activity feed */}
+      <div className="px-6 pb-6">
+        <div
+          className="rounded-xl p-4"
+          style={{ background: '#1E293B', border: '1px solid #334155', maxWidth: '480px' }}
+        >
+          <h2 className="text-sm font-semibold text-white mb-3">Activity</h2>
+          {activities.length === 0 ? (
+            <p className="text-sm" style={{ color: '#475569' }}>No activity yet.</p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {activities.map((activity) => (
+                <div
+                  key={activity._id}
+                  className="flex items-start gap-3 py-2"
+                  style={{ borderBottom: '1px solid #0F172A' }}
+                >
+                  <div
+                    className="w-6 h-6 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0 mt-0.5"
+                    style={{ background: '#6366F1' }}
+                  >
+                    {activity.user?.name?.[0]?.toUpperCase()}
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium text-white">
+                      {activity.user?.name}
+                    </span>
+                    <span className="text-sm" style={{ color: '#94A3B8' }}>
+                      {' '}{activity.action}
+                    </span>
+                    <p className="text-xs mt-0.5" style={{ color: '#475569' }}>
+                      {new Date(activity.createdAt).toLocaleTimeString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       </div>
     </div>
