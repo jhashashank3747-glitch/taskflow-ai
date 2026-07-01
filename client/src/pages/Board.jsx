@@ -114,7 +114,6 @@ function Board() {
         position: lists.length,
       });
       setNewListTitle('');
-      // Emit to other users
       socket.emit('list_created', { boardId: id, list: res.data });
       fetchListsAndCards();
     } catch (err) {
@@ -133,12 +132,21 @@ function Board() {
         position: list?.cards?.length || 0,
       });
       setNewCardTitles((prev) => ({ ...prev, [listId]: '' }));
-      // Emit to other users
       socket.emit('card_created', { boardId: id, card: res.data });
       fetchListsAndCards();
     } catch (err) {
       setError('Failed to create card');
     }
+  };
+
+  const handleSubtasksCreated = (listId, subtasks) => {
+    setLists((prev) =>
+      prev.map((l) =>
+        l._id === listId
+          ? { ...l, cards: [...l.cards, ...subtasks] }
+          : l
+      )
+    );
   };
 
   const findListByCardId = (cardId) => {
@@ -176,7 +184,6 @@ function Board() {
         )
       );
 
-      // Emit to other users
       socket.emit('card_moved', {
         boardId: id,
         cardId: activeId,
@@ -201,7 +208,6 @@ function Board() {
         position: newOverCards.length - 1,
       });
 
-      // Emit to other users
       socket.emit('card_moved', {
         boardId: id,
         cardId: activeId,
@@ -241,6 +247,7 @@ function Board() {
                 setNewCardTitles((prev) => ({ ...prev, [listId]: val }))
               }
               onAddCard={handleCreateCard}
+              onSubtasksCreated={handleSubtasksCreated}
             />
           ))}
 

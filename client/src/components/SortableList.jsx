@@ -2,7 +2,7 @@ import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
 import { useDroppable } from '@dnd-kit/core';
 import SortableCard from './SortableCard';
 
-function SortableList({ list, newCardTitle, onCardTitleChange, onAddCard }) {
+function SortableList({ list, newCardTitle, onCardTitleChange, onAddCard, onSubtasksCreated }) {
   const { setNodeRef } = useDroppable({ id: list._id });
 
   return (
@@ -15,7 +15,11 @@ function SortableList({ list, newCardTitle, onCardTitleChange, onAddCard }) {
       >
         <div ref={setNodeRef} className="flex flex-col gap-2 min-h-8 mb-3">
           {list.cards.map((card) => (
-            <SortableCard key={card._id} card={card} />
+            <SortableCard
+              key={card._id}
+              card={card}
+              onSubtasksCreated={(subtasks) => onSubtasksCreated(list._id, subtasks)}
+            />
           ))}
         </div>
       </SortableContext>
