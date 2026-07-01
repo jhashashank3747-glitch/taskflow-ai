@@ -3,6 +3,8 @@ dns.setServers(['8.8.8.8', '8.8.4.4']);
 
 require('dotenv').config();
 const express = require('express');
+const http = require('http');
+const { Server } = require('socket.io');
 const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const connectDB = require('./config/db');
@@ -13,6 +15,15 @@ const listRoutes = require('./routes/listRoutes');
 const cardRoutes = require('./routes/cardRoutes');
 
 const app = express();
+const httpServer = http.createServer(app);
+
+const io = new Server(httpServer, {
+  cors: {
+    origin: process.env.CLIENT_URL,
+    methods: ['GET', 'POST'],
+    credentials: true,
+  },
+});
 
 connectDB();
 
@@ -28,5 +39,41 @@ app.use('/api/cards', cardRoutes);
 
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 
+// Socket.io logic
+io.on('connection', (socket) => {
+  console.log(`User connected: ${socket.id}`);
+
+  // User joins a board's room when they open that board
+  socket.on('join_board', (boardId) => {
+    socket.join(boardId);
+    console.log(`Socket ${socket.id} joined board ${boardId}`);
+  });
+
+  // User leaves a board's room when they navigate away
+  socket.on('leave_board', (boardId) => {
+    socket.leave(boardId);
+    console.log(`Socket ${socket.id} left board ${boardId}`);
+  });
+
+  // When a card is moved, broadcast to everyone else in that board's room
+  socket.on('card_moved', ({ boardId, cardId, newListId, position }) => {
+    socket.to(boardId).emit('card_moved', { cardId, newListId, position });
+  });
+
+  // When a card is created, broadcast to everyone in that board's room
+  socket.on('card_created', ({ boardId, card }) => {
+    socket.to(boardId).emit('card_created', card);
+  });
+
+  // When a list is created, broadcast to everyone in that board's room
+  socket.on('list_created', ({ boardId, list }) => {
+    socket.to(boardId).emit('list_created', list);
+  });
+
+  socket.on('disconnect', () => {
+    console.log(`User disconnected: ${socket.id}`);
+  });
+});
+
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+httpServer.listen(PORT, () => console.log(`Server running on port ${PORT}`));

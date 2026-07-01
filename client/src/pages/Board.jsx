@@ -9,6 +9,7 @@ import {
 } from '@dnd-kit/core';
 import { arrayMove } from '@dnd-kit/sortable';
 import api from '../services/api';
+import socket from '../services/socket';
 import SortableList from '../components/SortableList';
 
 function Board() {
@@ -49,18 +50,72 @@ function Board() {
   useEffect(() => {
     fetchBoard();
     fetchListsAndCards();
+
+    // Connect socket and join this board's room
+    socket.connect();
+    socket.emit('join_board', id);
+
+    // Listen for card moved by another user
+    socket.on('card_moved', ({ cardId, newListId, position }) => {
+      setLists((prev) => {
+        const sourceList = prev.find((l) =>
+          l.cards.some((c) => c._id === cardId)
+        );
+        if (!sourceList) return prev;
+        const card = sourceList.cards.find((c) => c._id === cardId);
+        const updatedCard = { ...card, list: newListId, position };
+
+        return prev.map((l) => {
+          if (l._id === sourceList._id) {
+            return {
+              ...l,
+              cards: l.cards.filter((c) => c._id !== cardId),
+            };
+          }
+          if (l._id === newListId) {
+            return { ...l, cards: [...l.cards, updatedCard] };
+          }
+          return l;
+        });
+      });
+    });
+
+    // Listen for card created by another user
+    socket.on('card_created', (card) => {
+      setLists((prev) =>
+        prev.map((l) =>
+          l._id === card.list ? { ...l, cards: [...l.cards, card] } : l
+        )
+      );
+    });
+
+    // Listen for list created by another user
+    socket.on('list_created', (list) => {
+      setLists((prev) => [...prev, { ...list, cards: [] }]);
+    });
+
+    // Cleanup when leaving the board page
+    return () => {
+      socket.emit('leave_board', id);
+      socket.off('card_moved');
+      socket.off('card_created');
+      socket.off('list_created');
+      socket.disconnect();
+    };
   }, [id]);
 
   const handleCreateList = async (e) => {
     e.preventDefault();
     if (!newListTitle.trim()) return;
     try {
-      await api.post('/lists', {
+      const res = await api.post('/lists', {
         title: newListTitle,
         boardId: id,
         position: lists.length,
       });
       setNewListTitle('');
+      // Emit to other users
+      socket.emit('list_created', { boardId: id, list: res.data });
       fetchListsAndCards();
     } catch (err) {
       setError('Failed to create list');
@@ -72,12 +127,14 @@ function Board() {
     if (!title?.trim()) return;
     try {
       const list = lists.find((l) => l._id === listId);
-      await api.post('/cards', {
+      const res = await api.post('/cards', {
         title,
         listId,
         position: list?.cards?.length || 0,
       });
       setNewCardTitles((prev) => ({ ...prev, [listId]: '' }));
+      // Emit to other users
+      socket.emit('card_created', { boardId: id, card: res.data });
       fetchListsAndCards();
     } catch (err) {
       setError('Failed to create card');
@@ -103,7 +160,6 @@ function Board() {
     if (!activeList || !overList) return;
 
     if (activeList._id === overList._id) {
-      // reordering within same list
       const oldIndex = activeList.cards.findIndex((c) => c._id === activeId);
       const newIndex = activeList.cards.findIndex((c) => c._id === overId);
       const reordered = arrayMove(activeList.cards, oldIndex, newIndex);
@@ -119,8 +175,15 @@ function Board() {
           api.put(`/cards/${card._id}`, { position: index })
         )
       );
+
+      // Emit to other users
+      socket.emit('card_moved', {
+        boardId: id,
+        cardId: activeId,
+        newListId: activeList._id,
+        position: newIndex,
+      });
     } else {
-      // moving card to different list
       const card = activeList.cards.find((c) => c._id === activeId);
       const newActiveCards = activeList.cards.filter((c) => c._id !== activeId);
       const newOverCards = [...overList.cards, { ...card, list: overList._id }];
@@ -135,6 +198,14 @@ function Board() {
 
       await api.put(`/cards/${activeId}`, {
         list: overList._id,
+        position: newOverCards.length - 1,
+      });
+
+      // Emit to other users
+      socket.emit('card_moved', {
+        boardId: id,
+        cardId: activeId,
+        newListId: overList._id,
         position: newOverCards.length - 1,
       });
     }
