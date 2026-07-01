@@ -3,6 +3,8 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Login from './pages/Login';
 import Signup from './pages/Signup';
 import Dashboard from './pages/Dashboard';
+import Workspace from './pages/Workspace';
+import Board from './pages/Board';
 
 function ProtectedRoute({ children }) {
   const { accessToken } = useAuth();
@@ -21,6 +23,22 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/workspace/:id"
+            element={
+              <ProtectedRoute>
+                <Workspace />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/board/:id"
+            element={
+              <ProtectedRoute>
+                <Board />
               </ProtectedRoute>
             }
           />
